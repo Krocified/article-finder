@@ -9,7 +9,7 @@ PREFS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 W_TITLE, W_DESC, W_BODY = 3, 2, 1
 B_WORD, B_SOURCE, B_DOMAIN = 15, 10, 20
 
-EMPTY = {"words": {}, "sources": {}, "domains": {}, "likes": 0, "recent": []}
+EMPTY = {"words": {}, "sources": {}, "domains": {}, "likes": 0, "recent": [], "seen": []}
 
 
 def load_prefs():
@@ -26,6 +26,7 @@ def save_prefs(prefs):
     prefs["words"] = dict(sorted(prefs["words"].items(), key=lambda kv: -kv[1])[:120])
     prefs["domains"] = dict(sorted(prefs["domains"].items(), key=lambda kv: -kv[1])[:15])
     prefs["recent"] = prefs["recent"][-8:]
+    prefs["seen"] = prefs["seen"][-300:]
     with open(PREFS_FILE, "w") as f:
         json.dump(prefs, f, indent=2)
 

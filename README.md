@@ -4,7 +4,8 @@ A daily tech/business reading brief that learns your taste.
 
 ## What it does
 
-Fetches fresh articles from Hacker News, Lobsters, and dev.to, ranks them, and
+Fetches fresh articles from Hacker News, Lobsters, and RSS feeds (Ars Technica,
+MIT Technology Review, Quanta, Aeon, TechCrunch), ranks them, and
 prints a top-7 brief. After the brief you can mark favorites in an interactive
 checkbox picker; the tool learns the *content* of what you like (topic words,
 tags, source, publisher domain) and biases future rankings toward it.
@@ -12,8 +13,8 @@ tags, source, publisher domain) and biases future rankings toward it.
 ```
 [finder] fetching hn…
 [finder] fetching lobsters…
-[finder] fetching devto…
-[finder] sources: hn=60, lobsters=25, devto=40 → 54 candidates after keyword/taste gate
+[finder] fetching rss…
+[finder] sources: hn=60, lobsters=25, rss=75 → 54 candidates after keyword/taste gate
 [finder] scoring candidates (normalized score + learned-content preference)…
 
 ============================================================
@@ -46,8 +47,8 @@ python3 fetch-articles.py
 
 - Candidates are gated by base topics (AI, business, technology, leadership,
   startups, …) plus words you've already shown taste for.
-- Raw scores are normalized per source (HN points aren't comparable to dev.to
-  reactions), then a preference bonus is added from your learned model.
+- Raw scores are normalized per source (HN points aren't comparable to
+  Lobsters points), then a preference bonus is added from your learned model.
 - For the top candidates the linked article page is fetched so *content* —
   not just the title — can re-rank them.
 
@@ -65,7 +66,7 @@ Delete `prefs.json` to reset your taste model.
 ```
 fetch-articles.py   entrypoint: gate → score → enrich → rank → brief → pick → learn
 finder/
-  sources.py        network: HN/Lobsters/dev.to, page-text extraction
+  sources.py        network: HN/Lobsters/RSS, page-text extraction
   features.py       tokenize, excerpt, topic keywords, article features
   prefs.py          prefs.json model, learning, preference bonus
   ui.py             interactive checkbox picker
@@ -75,6 +76,8 @@ finder/
 
 - [Hacker News](https://news.ycombinator.com) — Firebase API
 - [Lobsters](https://lobste.rs) — `hottest.json`
-- [dev.to](https://dev.to) — public API (includes full article body)
+- RSS — Ars Technica, MIT Technology Review, Quanta, Aeon, TechCrunch
+  (freshest item in each feed ranks top; edit `RSS_FEEDS` in `finder/sources.py`)
 
-All keyless and free.
+All keyless and free. Articles already shown in a past brief are filtered out
+(never recommended twice).

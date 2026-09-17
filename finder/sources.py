@@ -1,14 +1,23 @@
-import urllib.request, json, re
+import urllib.request, json, re, time
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 
-UA = {"User-Agent": "article-finder/1.0", "Accept-Encoding": "identity"}
+UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", "Accept-Encoding": "identity"}
 
 HN_TOP = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HN_ITEM = "https://hacker-news.firebaseio.com/v0/item/{}.json"
 LOB = "https://lobste.rs/hottest.json"
-DEVTO = "https://dev.to/api/articles?per_page=40"
+
+# tag, name, feed url — newest item in each feed ranks top (score normalized per source)
+RSS_FEEDS = [
+    ("ars", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+    ("mit", "MIT Technology Review", "https://www.technologyreview.com/feed/"),
+    ("quantamag", "Quanta Magazine", "https://www.quantamagazine.org/feed/"),
+    ("aeon", "Aeon", "https://aeon.co/feed.rss"),
+    ("techcrunch", "TechCrunch", "https://techcrunch.com/feed/"),
+]
 
 
 def fetch(url, timeout=10):
@@ -54,16 +63,45 @@ def grab_lobsters():
     return out
 
 
-def grab_devto():
+def _rss_time(txt):
+    if not txt:
+        return time.time()
+    txt = txt.replace("Z", "+00:00").replace("GMT", "+0000")
+    for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%S.%f%z"):
+        try:
+            return datetime.strptime(txt, fmt).timestamp()
+        except ValueError:
+            pass
+    return time.time()
+
+
+def grab_rss():
     out = []
-    for p in fetch(DEVTO):
-        out.append(_entry(
-            title=p.get("title", ""), link=p.get("url", ""),
-            tag="dev.to", score=p.get("positive_reactions_count", 0),
-            created=epoch(p["published_at"]),
-            desc=p.get("description", ""),
-            tags=p.get("tag_list", []),
-            body=p.get("body_markdown", "")))  # full content, free
+    for tag, name, url in RSS_FEEDS:
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            root = ET.fromstring(urllib.request.urlopen(req, timeout=10).read())
+        except Exception:
+            continue
+        for i, it in enumerate(root.findall(".//item") + root.findall(".//{*}entry")):
+            d = {}
+            for c in it:
+                ln = c.tag.split("}")[-1]
+                if ln == "link":
+                    d["link"] = d.get("link") or (c.get("href") or c.text or "")
+                else:
+                    d[ln] = (c.text or "").strip()
+            title = d.get("title", "")[:300]
+            link = d.get("link", "")
+            if not (title and link):
+                continue
+            out.append(_entry(
+                title=title, link=link, tag=tag,
+                score=max(1, 100 - i),  # freshest item tops its source
+                created=_rss_time(d.get("pubDate") or d.get("published")
+                                  or d.get("updated")),
+                desc=(d.get("description") or d.get("summary") or "")[:2000]))
     return out
 
 

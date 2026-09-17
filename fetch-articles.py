@@ -2,7 +2,7 @@
 import sys, time
 from concurrent.futures import ThreadPoolExecutor
 
-from finder.sources import grab_hn, grab_lobsters, grab_devto, page_text
+from finder.sources import grab_hn, grab_lobsters, grab_rss, page_text
 from finder.features import rich_features, excerpt, TOPIC_RE
 from finder.prefs import (load_prefs, save_prefs, record_likes,
                           pref_bonus, learned_hit)
@@ -20,13 +20,10 @@ def log(msg):
 def gate(prefs, a):
     if a["created"] < CUTOFF:
         return False
-    if a["tag"] == "hn" and not (TOPIC_RE.search(a["title"]) or learned_hit(prefs, a)):
-        return False
-    if a["tag"] == "lobsters":
-        blob = a["title"] + " " + " ".join(a.get("tags", []))
-        if not (TOPIC_RE.search(blob) or learned_hit(prefs, a)):
-            return False
-    return True
+    if a["tag"] == "hn":
+        return TOPIC_RE.search(a["title"]) or learned_hit(prefs, a)
+    blob = a["title"] + " " + a.get("desc", "") + " " + " ".join(a.get("tags", []))
+    return TOPIC_RE.search(blob) or learned_hit(prefs, a)
 
 
 def score_pool(prefs, pool):
@@ -83,8 +80,9 @@ def print_brief(pool, prefs):
 def main():
     prefs = load_prefs()
     words = prefs.get("words", {})
+    seen = set(prefs.get("seen", []))
     pool, n_src = [], {}
-    grabbers = {"hn": grab_hn, "lobsters": grab_lobsters, "devto": grab_devto}
+    grabbers = {"hn": grab_hn, "lobsters": grab_lobsters, "rss": grab_rss}
 
     for name, grab in grabbers.items():
         log(f"fetching {name}…")
@@ -92,7 +90,8 @@ def main():
             src = grab()
             n_src[name] = len(src)
             for a in src:
-                if gate(prefs, a) and not any(x["title"] == a["title"] for x in pool):
+                if (gate(prefs, a) and a["link"] not in seen
+                        and not any(x["title"] == a["title"] for x in pool)):
                     pool.append(a)
         except Exception as e:
             log(f"{name} error: {e}")
@@ -108,6 +107,7 @@ def main():
     enrich(pool)
     score_pool(prefs, pool)
     pool = pool[:TOP_N]
+    prefs["seen"] = prefs.get("seen", []) + [a["link"] for a in pool]
     log("top 7 picked" + (f"  |  taste words: " + ", ".join(
         sorted(words, key=lambda w: -words[w])[:3]) if words else ""))
     log("rendering brief…")
