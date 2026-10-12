@@ -2,8 +2,9 @@
 import sys, time
 from concurrent.futures import ThreadPoolExecutor
 
-from finder.sources import grab_hn, grab_lobsters, grab_rss, page_text
-from finder.features import rich_features, excerpt, TOPIC_RE
+from finder.sources import (grab_hn, grab_lobsters, grab_rss,
+                            page_text, BLOCK_TITLES, BLOCK_DOMAINS)
+from finder.features import rich_features, excerpt, TOPIC_RE, topics_of
 from finder.prefs import (load_prefs, save_prefs, record_likes,
                           pref_bonus, learned_hit)
 from finder.ui import pick
@@ -11,6 +12,7 @@ from finder.ui import pick
 CUTOFF = time.time() - 30 * 86400  # 30 days ago
 ENRICH = 12    # candidates whose linked page we fetch for content matching
 TOP_N = 7
+PER_SOURCE = 2  # max items any single source can take in the brief (spreads the picks)
 
 
 def log(msg):
@@ -19,6 +21,10 @@ def log(msg):
 
 def gate(prefs, a):
     if a["created"] < CUTOFF:
+        return False
+    if any(b in a["title"].lower() for b in BLOCK_TITLES):
+        return False
+    if any(d in a["link"] for d in BLOCK_DOMAINS):
         return False
     if a["tag"] == "hn":
         return TOPIC_RE.search(a["title"]) or learned_hit(prefs, a)
@@ -33,7 +39,10 @@ def score_pool(prefs, pool):
             if a["tag"] == tag:
                 a["norm"] = round(100 * a["score"] / top)
     for a in pool:
-        a["bonus"] = pref_bonus(prefs, rich_features(a), a["tag"], a.get("domain", ""))
+        a["topics"] = topics_of(a["title"], a.get("desc", "")[:2000],
+                                (a.get("body") or "")[:6000])
+        a["bonus"] = pref_bonus(prefs, rich_features(a), a["tag"],
+                                a.get("domain", ""), a["topics"])
         a["final"] = a["norm"] + a["bonus"]
     pool.sort(key=lambda a: -a["final"])
 
@@ -53,16 +62,28 @@ def enrich(pool):
         list(ex.map(get, todo))
 
 
+def diversify(pool, n, per_source=PER_SOURCE):
+    out, by_tag = [], {}
+    for a in pool:
+        if by_tag.get(a["tag"], 0) >= per_source:
+            continue
+        out.append(a)
+        by_tag[a["tag"]] = by_tag.get(a["tag"], 0) + 1
+        if len(out) >= n:
+            break
+    return out
+
+
 def print_brief(pool, prefs):
-    words = prefs.get("words", {})
+    topics = prefs.get("topics", {})
     print("=" * 60)
     print("  MORNING BRIEF — Fresh Articles (personalized ranking)")
     if prefs.get("likes"):
         src = ", ".join(f"{t}×{c}" for t, c in
                         sorted(prefs.get("sources", {}).items(), key=lambda kv: -kv[1])[:2])
-        wd = ", ".join(f"{w}×{c}" for w, c in
-                       sorted(words.items(), key=lambda kv: -kv[1])[:4])
-        print(f"  from {prefs['likes']} liked: {wd}  [{src}]")
+        tp = ", ".join(f"{t}×{c}" for t, c in
+                       sorted(topics.items(), key=lambda kv: -kv[1])[:4])
+        print(f"  from {prefs['likes']} liked: {tp}  [{src}]")
     print("=" * 60)
     print()
     for i, a in enumerate(pool, 1):
@@ -79,7 +100,7 @@ def print_brief(pool, prefs):
 
 def main():
     prefs = load_prefs()
-    words = prefs.get("words", {})
+    topics = prefs.get("topics", {})
     seen = set(prefs.get("seen", []))
     pool, n_src = [], {}
     grabbers = {"hn": grab_hn, "lobsters": grab_lobsters, "rss": grab_rss}
@@ -106,10 +127,10 @@ def main():
     # ponytail: body scan limited to top ENRICH; widen if discovery beyond it matters
     enrich(pool)
     score_pool(prefs, pool)
-    pool = pool[:TOP_N]
+    pool = diversify(pool, TOP_N)
     prefs["seen"] = prefs.get("seen", []) + [a["link"] for a in pool]
-    log("top 7 picked" + (f"  |  taste words: " + ", ".join(
-        sorted(words, key=lambda w: -words[w])[:3]) if words else ""))
+    log("top 7 picked" + (f"  |  taste topics: " + ", ".join(
+        sorted(topics, key=lambda t: -topics[t])[:3]) if topics else ""))
     log("rendering brief…")
     print_brief(pool, prefs)
 
@@ -124,9 +145,9 @@ def main():
         return
     record_likes(prefs, pool, chosen)
     save_prefs(prefs)
-    wd = sorted(prefs["words"].items(), key=lambda kv: -kv[1])[:5]
-    log(f"learned from {len(chosen)} favorite(s) → words: {', '.join(w for w, _ in wd)}")
-    print(f"Saved {len(chosen)} favorite(s) → learned: {', '.join(w for w, _ in wd)}")
+    tp = sorted(prefs["topics"].items(), key=lambda kv: -kv[1])[:5]
+    log(f"learned from {len(chosen)} favorite(s) → topics: {', '.join(t for t, _ in tp)}")
+    print(f"Saved {len(chosen)} favorite(s) → learned: {', '.join(t for t, _ in tp)}")
 
 
 if __name__ == "__main__":

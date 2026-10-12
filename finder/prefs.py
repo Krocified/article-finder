@@ -1,15 +1,16 @@
 import os, json
 
-from .features import tokenize
+from .features import tokenize, topics_of
 
 PREFS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "prefs.json")
 
-# per-like feature weights: title ×3, excerpt/tags ×2, full body ×1, domain/source ×1
-W_TITLE, W_DESC, W_BODY = 3, 2, 1
-B_WORD, B_SOURCE, B_DOMAIN = 15, 10, 20
+# learning weights. topics carry the taste signal; content words are a weak tiebreak.
+T_TOPIC, W_DESC, W_BODY = 40, 2, 1
+B_TOPIC, B_WORD, B_SOURCE, B_DOMAIN = 1, 5, 10, 20
 
-EMPTY = {"words": {}, "sources": {}, "domains": {}, "likes": 0, "recent": [], "seen": []}
+EMPTY = {"topics": {}, "words": {}, "sources": {}, "domains": {},
+         "likes": 0, "recent": [], "seen": []}
 
 
 def load_prefs():
@@ -23,6 +24,7 @@ def load_prefs():
 
 
 def save_prefs(prefs):
+    prefs["topics"] = dict(sorted(prefs["topics"].items(), key=lambda kv: -kv[1])[:12])
     prefs["words"] = dict(sorted(prefs["words"].items(), key=lambda kv: -kv[1])[:120])
     prefs["domains"] = dict(sorted(prefs["domains"].items(), key=lambda kv: -kv[1])[:15])
     prefs["recent"] = prefs["recent"][-8:]
@@ -31,29 +33,28 @@ def save_prefs(prefs):
         json.dump(prefs, f, indent=2)
 
 
-def pref_bonus(prefs, features, tag, domain):
-    words = prefs.get("words", {})
-    return (B_WORD * sum(words.get(w, 0) for w in features)
+def pref_bonus(prefs, features, tag, domain, topics=frozenset()):
+    return (B_TOPIC * T_TOPIC * sum(prefs.get("topics", {}).get(t, 0) for t in topics)
+            + B_WORD * sum(prefs.get("words", {}).get(w, 0) for w in features)
             + B_SOURCE * prefs.get("sources", {}).get(tag, 0)
             + B_DOMAIN * prefs.get("domains", {}).get(domain, 0))
 
 
 def learned_hit(prefs, a):
-    words = prefs.get("words", {})
-    return bool(words) and any(w in words for w in tokenize(a["title"]) | set(a.get("tags", [])))
+    topt = prefs.get("topics", {})
+    return bool(topt) and bool(topics_of(a["title"], a.get("desc", "")) & set(topt))
 
 
 def record_likes(prefs, pool, chosen):
     for idx in chosen:
         a = pool[idx]
-        for w in tokenize(a["title"]):
-            prefs["words"][w] = prefs["words"].get(w, 0) + W_TITLE
+        body = a.get("body", "")
+        for t in topics_of(a["title"], a.get("desc", ""), body):
+            prefs["topics"][t] = prefs["topics"].get(t, 0) + T_TOPIC
         for w in tokenize(a.get("desc", "")[:4000]):
             prefs["words"][w] = prefs["words"].get(w, 0) + W_DESC
-        for w in a.get("tags", []):
-            prefs["words"][w] = prefs["words"].get(w, 0) + W_DESC
-        if a.get("body"):
-            for w in tokenize(a["body"]):
+        if body:
+            for w in tokenize(body):
                 prefs["words"][w] = prefs["words"].get(w, 0) + W_BODY
         prefs["sources"][a["tag"]] = prefs["sources"].get(a["tag"], 0) + 1
         dom = a.get("domain", "")

@@ -17,7 +17,15 @@ RSS_FEEDS = [
     ("quantamag", "Quanta Magazine", "https://www.quantamagazine.org/feed/"),
     ("aeon", "Aeon", "https://aeon.co/feed.rss"),
     ("techcrunch", "TechCrunch", "https://techcrunch.com/feed/"),
+    ("verge", "The Verge", "https://www.theverge.com/rss/index.xml"),
+    ("wired", "Wired", "https://www.wired.com/feed/rss"),
+    ("simonwillison", "Simon Willison", "https://simonwillison.net/atom/everything/"),
+    ("jvns", "Julia Evans", "https://jvns.ca/atom.xml"),
 ]
+
+# paywalled/aggregator roundups we never want to recommend (case-insensitive substring)
+BLOCK_TITLES = ("the download",)
+BLOCK_DOMAINS = ("technologyreview.com",)
 
 
 def fetch(url, timeout=10):
