@@ -77,7 +77,7 @@ def diversify(pool, n, per_source=PER_SOURCE):
 def print_brief(pool, prefs):
     topics = prefs.get("topics", {})
     print("=" * 60)
-    print("  MORNING BRIEF — Fresh Articles (personalized ranking)")
+    print("  MORNING BRIEF: Fresh Articles (personalized ranking)")
     if prefs.get("likes"):
         src = ", ".join(f"{t}×{c}" for t, c in
                         sorted(prefs.get("sources", {}).items(), key=lambda kv: -kv[1])[:2])
@@ -137,11 +137,11 @@ def main():
     chosen = pick([a["title"] for a in pool])
     if chosen is None:
         log("picker skipped (no tty) or cancelled by user")
-        print("Skipped — nothing saved.")
+        print("Skipped: nothing saved.")
         return
     if not chosen:
         log("no favorites marked")
-        print("No favorites marked — ranking unchanged.")
+        print("No favorites marked. Ranking unchanged.")
         return
     record_likes(prefs, pool, chosen)
     save_prefs(prefs)

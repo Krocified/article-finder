@@ -1,14 +1,13 @@
 # article-finder
 
-A daily tech/business reading brief that learns your taste.
+A daily tech and business reading brief that learns what you like.
 
 ## What it does
 
-Fetches fresh articles from Hacker News, Lobsters, and RSS feeds (Ars Technica,
-MIT Technology Review, Quanta, Aeon, TechCrunch), ranks them, and
-prints a top-7 brief. After the brief you can mark favorites in an interactive
-checkbox picker; the tool learns the *content* of what you like (topic words,
-tags, source, publisher domain) and biases future rankings toward it.
+It pulls fresh links from Hacker News, Lobsters, and a set of RSS feeds, drops
+the ones outside your interests, ranks the rest, and prints a top 7. You mark
+the good ones in a checkbox picker; it remembers the topics, words, source, and
+domain behind them and biases tomorrow's ranking toward the same.
 
 ```
 [finder] fetching hn…
@@ -18,7 +17,7 @@ tags, source, publisher domain) and biases future rankings toward it.
 [finder] scoring candidates (normalized score + learned-content preference)…
 
 ============================================================
-  MORNING BRIEF — Fresh Articles (personalized ranking)
+  MORNING BRIEF: Fresh Articles (personalized ranking)
 ============================================================
 1. Muse – Meta's personal AI agent
    [hn]  score: 605
@@ -28,7 +27,7 @@ tags, source, publisher domain) and biases future rankings toward it.
  [ ]  Muse – Meta's personal AI agent
  [ ]  Reverse engineering my e-scooter and rewriting the firmware in rust
  ↑/↓ move · space toggle · enter done · q cancel
-Saved 1 favorite(s) → learned: rust, firmware, e-scooter
+Saved 1 favorite(s) → learned: ai, tech, science
 ```
 
 ## Run
@@ -37,7 +36,7 @@ Saved 1 favorite(s) → learned: rust, firmware, e-scooter
 ./run.sh
 ```
 
-or directly:
+or:
 
 ```
 python3 fetch-articles.py
@@ -45,39 +44,47 @@ python3 fetch-articles.py
 
 ## How ranking works
 
-- Candidates are gated by base topics (AI, business, technology, leadership,
-  startups, …) plus words you've already shown taste for.
-- Raw scores are normalized per source (HN points aren't comparable to
-  Lobsters points), then a preference bonus is added from your learned model.
-- For the top candidates the linked article page is fetched so *content* —
-  not just the title — can re-rank them.
+- Gate: keep an article if it matches a base topic (AI, business, technology,
+  leadership, communication, startups, management, innovation, software,
+  engineering) or a topic you have liked before.
+- Normalize: score each item against the best item from its own source, so HN
+  points and Lobsters points are comparable.
+- Bonus: add the preference bonus from your learned model.
+- Enrich: fetch the linked page for the top 12 candidates and rescore on the
+  page text, not just the title.
+- Diversify: cap the brief at 2 picks per source.
 
 ## Learning
 
-Liked articles feed `prefs.json` next to the script. Features learned:
+Every favorite is written to `prefs.json` next to the script:
 
-- title words (weight 3), excerpt/tags (weight 2), full body words (weight 1)
-- source and publisher domain
+- topics (weight 40): the main signal
+- excerpt words (weight 2) and body words (weight 1): a light tiebreak
+- source and publisher domain (weight 1 each)
 
-Delete `prefs.json` to reset your taste model.
+At ranking time those become a preference bonus: domain x20, source x10, word
+x5, topic x40. Delete `prefs.json` to reset the model.
 
 ## Project layout
 
 ```
-fetch-articles.py   entrypoint: gate → score → enrich → rank → brief → pick → learn
+fetch-articles.py   entrypoint: gate, score, enrich, rank, brief, pick, learn
 finder/
-  sources.py        network: HN/Lobsters/RSS, page-text extraction
-  features.py       tokenize, excerpt, topic keywords, article features
+  sources.py        HN, Lobsters, RSS, page-text extraction
+  features.py       tokenize, excerpt, topic taxonomy, article features
   prefs.py          prefs.json model, learning, preference bonus
   ui.py             interactive checkbox picker
 ```
 
 ## Sources
 
-- [Hacker News](https://news.ycombinator.com) — Firebase API
-- [Lobsters](https://lobste.rs) — `hottest.json`
-- RSS — Ars Technica, MIT Technology Review, Quanta, Aeon, TechCrunch
-  (freshest item in each feed ranks top; edit `RSS_FEEDS` in `finder/sources.py`)
+- Hacker News (Firebase API)
+- Lobsters (`hottest.json`)
+- RSS: Ars Technica, MIT Technology Review, Quanta, Aeon, TechCrunch, The Verge,
+  Wired, Simon Willison, Julia Evans. The freshest item in each feed ranks top;
+  edit `RSS_FEEDS` in `finder/sources.py`.
+- Blocked outright by `BLOCK_TITLES` and `BLOCK_DOMAINS`: currently
+  `technologyreview.com` and "The Download".
 
-All keyless and free. Articles already shown in a past brief are filtered out
-(never recommended twice).
+All keyless and free. Links already shown in a past brief are filtered out, so
+nothing is recommended twice.

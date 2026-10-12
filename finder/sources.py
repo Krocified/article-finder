@@ -10,7 +10,7 @@ HN_TOP = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HN_ITEM = "https://hacker-news.firebaseio.com/v0/item/{}.json"
 LOB = "https://lobste.rs/hottest.json"
 
-# tag, name, feed url — newest item in each feed ranks top (score normalized per source)
+# tag, name, feed url. newest item in each feed ranks top (score normalized per source)
 RSS_FEEDS = [
     ("ars", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
     ("mit", "MIT Technology Review", "https://www.technologyreview.com/feed/"),
